@@ -4,6 +4,7 @@ import KeyboardArrowUpRoundedIcon from '@mui/icons-material/KeyboardArrowUpRound
 import KeyboardArrowDownRoundedIcon from '@mui/icons-material/KeyboardArrowDownRounded';
 import StakedNFTCard from "./StakedNFTCard";
 import LoadingPage from "./LoadingPage";
+import { LOCK_TIME } from "../config";
 
 export default function YardItem({
   yard,
@@ -17,8 +18,12 @@ export default function YardItem({
   const handleUnstake = () => {
     onWithdrawFromYard(yard.landMint, yard.animMints, yard.farmerMints)
   }
+  const [locked, setLocked] = useState(false);
   useEffect(() => {
-    const date = new Date(stakedTime * 1000)
+    const date = new Date(stakedTime * 1000);
+    const now = new Date();
+    const state = new Date(stakedTime*1000 + LOCK_TIME) > now;
+    setLocked(state);
     const dateString = date.getUTCFullYear() + "/" + (date.getUTCMonth() + 1) + "/" + date.getUTCDate() + " " + date.getUTCHours() + ":" + date.getUTCMinutes();
     setTime(dateString)
   }, [stakedTime])
@@ -40,11 +45,15 @@ export default function YardItem({
           </div>
         </div>
         <div className="yard-action">
-          <button className="unstake-button" onClick={() => handleUnstake()}>
+          <button className="unstake-button" onClick={() => handleUnstake()} disabled={locked}>
             {/* {unstakeLoading ? */}
             {/* <ClipLoader color="#fff" size={18} /> */}
             {/* : */}
+            {locked ? 
+            <>locked</>
+            :
             <>unstake</>
+            }
             {/* } */}
           </button>
           <button className="collapse-button">

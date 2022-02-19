@@ -210,14 +210,14 @@ a {
   position: sticky;
   top: 70px;
   z-index: 3;
-  background: #cde9ff;
+  background: var(--main-font-color);
   max-width: 800px;
   margin-right: auto;
   margin-left: auto;
 }
 .stake-total p {
   font-weight: 700;
-  color: #333;
+  color: #eee;
 }
 .stake-total-content {
   display: flex;
@@ -242,8 +242,8 @@ a {
   text-transform: uppercase;
   font-weight: 900;
   border: none;
-  background: var(--main-font-color);
-  color: #fff;
+  color: var(--main-font-color);
+  background: #fff;
   transition: all 0.3s;
   pointer-events: auto;
   min-width: 180px;
@@ -252,12 +252,12 @@ a {
   justify-content: center;
 }
 .stake-button:hover {
-  background-color: #1d5331;
+  background-color: #eee;
   transition: all 0.3s;
   transform: translateY(-2px);
 }
 .stake-button:disabled {
-  background-color: #777;
+  background-color: #c1c1c1;
   cursor: no-drop;
   pointer-events: none;
 }
@@ -274,6 +274,7 @@ a {
 .count-items .item h5 {
   font-size: 20px;
   text-transform: uppercase;
+  color: #cddc39;
 }
 .yard-item {
   border-radius: 12px;
@@ -497,9 +498,10 @@ p.empty-nft {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: var(--main-bg-color);
+  background-color: #333;
   flex-direction: column;
 }
 .loading span {
   margin-top: 10px;
+  color: #fff;
 }

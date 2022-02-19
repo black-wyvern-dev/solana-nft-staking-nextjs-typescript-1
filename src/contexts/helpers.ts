@@ -127,6 +127,7 @@ export const stakeToYard = async (
   land_mint: string,
   anim_mints: string[],
   farmer_mints: string[],
+  allUncheck: Function
 ) => {
   if (!wallet.publicKey || land_mint === "" || anim_mints.length === 0 || farmer_mints.length === 0) return;
 
@@ -168,18 +169,52 @@ export const stakeToYard = async (
             owner: wallet.publicKey
           }
         }
-      ))
+      ));
+      let txHash = await wallet.sendTransaction(tx, solConnection);
+      await solConnection.confirmTransaction(txHash, "confirmed");
+      tx = new Transaction();
     }
 
     let userLandTokenAccount = await getAssociatedTokenAccount(wallet.publicKey, land_nft_mint);
+    let accountOfNFT = await getNFTTokenAccount(land_nft_mint);
+    if (userLandTokenAccount.toBase58() !== accountOfNFT.toBase58()) {
+        let ownerOfNAFT = await getOwnerOfNFT(land_nft_mint);
+        if (ownerOfNAFT.toBase58() === wallet.publicKey.toBase58()) {
+            userLandTokenAccount = accountOfNFT;
+        } else {
+            errorAlert("NFT is not owned by this wallet.");
+            return;
+        }
+    }
+
     let userAnimTokenAccounts: PublicKey[] = [];
     let userFarmerTokenAccounts: PublicKey[] = [];
     for (let mint of anim_nft_mints) {
-      const acc = await getAssociatedTokenAccount(wallet.publicKey as PublicKey, mint);
+      let acc = await getAssociatedTokenAccount(wallet.publicKey as PublicKey, mint);
+      let accountOfNFT = await getNFTTokenAccount(mint);
+      if (acc.toBase58() !== accountOfNFT.toBase58()) {
+          let ownerOfNAFT = await getOwnerOfNFT(mint);
+          if (ownerOfNAFT.toBase58() === wallet.publicKey.toBase58()) {
+              acc = accountOfNFT;
+          } else {
+              errorAlert("NFT is not owned by this wallet.");
+              return;
+          }
+      }
       userAnimTokenAccounts.push(acc);
     };
     for (let mint of farmer_nft_mints) {
-      const acc = await getAssociatedTokenAccount(wallet.publicKey as PublicKey, mint);
+      let acc = await getAssociatedTokenAccount(wallet.publicKey as PublicKey, mint);
+      let accountOfNFT = await getNFTTokenAccount(mint);
+      if (acc.toBase58() !== accountOfNFT.toBase58()) {
+          let ownerOfNAFT = await getOwnerOfNFT(mint);
+          if (ownerOfNAFT.toBase58() === wallet.publicKey.toBase58()) {
+              acc = accountOfNFT;
+          } else {
+              errorAlert("NFT is not owned by this wallet.");
+              return;
+          }
+      }
       userFarmerTokenAccounts.push(acc);
     };
     let remainingAccounts = [], destNftTokenAccounts = [];
@@ -261,14 +296,15 @@ export const stakeToYard = async (
     let txHash = await wallet.sendTransaction(tx, solConnection);
     await solConnection.confirmTransaction(txHash, "confirmed");
     await new Promise((resolve, reject) => {
-      solConnection.onAccountChange(userBarnKey, (data: AccountInfo<Buffer> | null) => {
+      solConnection.onAccountChange(ret.destinationAccounts[0], (data: AccountInfo<Buffer> | null) => {
         if (!data) reject();
         resolve(true);
       });
     });
     successAlert("Success. txHash=" + txHash);
   } catch (e) {
-    errorAlert("Error =" + e);
+    errorAlert(e);
+    allUncheck();
   }
 }
 
@@ -277,9 +313,11 @@ export const withdrawFromYard = async (
   land_mint: string,
   anim_mints: string[],
   farmer_mints: string[],
-  setUnstakeLoading: Function
+  startLoading: Function,
+  closeLoading: Function,
+  updatePage: Function
 ) => {
-  setUnstakeLoading(true);
+  startLoading();
   if (!wallet.publicKey || land_mint === "" || anim_mints.length === 0 || farmer_mints.length === 0) return;
 
   try {
@@ -303,17 +341,31 @@ export const withdrawFromYard = async (
 
     let tx = new Transaction();
 
-    let userLandTokenAccount = await getAssociatedTokenAccount(wallet.publicKey, land_nft_mint);
+    let userLandTokenAccount: PublicKey = PublicKey.default;
     let userAnimTokenAccounts: PublicKey[] = [];
     let userFarmerTokenAccounts: PublicKey[] = [];
-    for (let mint of anim_nft_mints) {
-      const acc = await getAssociatedTokenAccount(wallet.publicKey as PublicKey, mint);
-      userAnimTokenAccounts.push(acc);
+    let result = await getATokenAccountsNeedCreate(
+      solConnection,
+      wallet.publicKey,
+      wallet.publicKey,
+      [land_nft_mint, ...anim_nft_mints, ...farmer_nft_mints]
+    );
+    userLandTokenAccount = result.destinationAccounts[0];
+    let i = 1;
+    // eslint-disable-next-line
+    for (let idx in anim_nft_mints) {
+      userAnimTokenAccounts.push(result.destinationAccounts[i++]);
     };
-    for (let mint of farmer_nft_mints) {
-      const acc = await getAssociatedTokenAccount(wallet.publicKey as PublicKey, mint);
-      userFarmerTokenAccounts.push(acc);
+    // eslint-disable-next-line
+    for (let idx in farmer_nft_mints) {
+      userFarmerTokenAccounts.push(result.destinationAccounts[i++]);
     };
+    
+    if (result.instructions.length > 0) {
+      for (let ins of result.instructions) {
+        tx.add(ins);
+      }
+    }
 
     let remainingAccounts = [], destNftTokenAccounts = [];
     let ret = await getATokenAccountsNeedCreate(
@@ -391,15 +443,16 @@ export const withdrawFromYard = async (
     let txHash = await wallet.sendTransaction(tx, solConnection);
     await solConnection.confirmTransaction(txHash, "confirmed");
     await new Promise((resolve, reject) => {
-      solConnection.onAccountChange(userBarnKey, (data: AccountInfo<Buffer> | null) => {
+      solConnection.onAccountChange(userFarmerTokenAccounts[0], (data: AccountInfo<Buffer> | null) => {
         if (!data) reject();
         resolve(true);
       });
     });
-    setUnstakeLoading(false);
+    closeLoading();
+    updatePage();
     successAlert("Success. txHash=" + txHash);
   } catch (e) {
-    setUnstakeLoading(false);
+    closeLoading();
     errorAlert("Error =" + e);
   }
 }
@@ -425,7 +478,7 @@ export const claimReward = async (
       program.programId,
     );
 
-    let instructions = [];
+    let tx = new Transaction();
     const rewardVault = await getAssociatedTokenAccount(globalAuthority, REWARD_TOKEN_MINT);
     const userRewardTokenAccount = await getAssociatedTokenAccount(wallet.publicKey, REWARD_TOKEN_MINT);
     const response = await solConnection.getAccountInfo(userRewardTokenAccount);
@@ -436,10 +489,10 @@ export const claimReward = async (
         wallet.publicKey,
         REWARD_TOKEN_MINT,
       );
-      instructions.push(createATAIx);
+      tx.add(createATAIx);
     }
 
-    const txHash = await program.rpc.claimReward(
+    tx.add(program.instruction.claimReward(
       bump, {
       accounts: {
         owner: wallet.publicKey,
@@ -449,13 +502,14 @@ export const claimReward = async (
         userRewardAccount: userRewardTokenAccount,
         tokenProgram: TOKEN_PROGRAM_ID,
       },
-      instructions,
+      // instructions,
     }
-    );
+    ));
 
+    let txHash = await wallet.sendTransaction(tx, solConnection);
     await solConnection.confirmTransaction(txHash, "confirmed");
     await new Promise((resolve, reject) => {
-      solConnection.onAccountChange(userBarnKey, (data: AccountInfo<Buffer> | null) => {
+      solConnection.onAccountChange(userRewardTokenAccount, (data: AccountInfo<Buffer> | null) => {
         if (!data) reject();
         resolve(true);
       });
@@ -541,4 +595,46 @@ export const getATokenAccountsNeedCreate = async (
     instructions,
     destinationAccounts,
   };
+}
+
+const getOwnerOfNFT = async (nftMintPk: PublicKey): Promise<PublicKey> => {
+  let tokenAccountPK = await getNFTTokenAccount(nftMintPk);
+  let tokenAccountInfo = await solConnection.getAccountInfo(tokenAccountPK);
+
+  console.log("nftMintPk=", nftMintPk.toBase58());
+  console.log("tokenAccountInfo =", tokenAccountInfo);
+
+  if (tokenAccountInfo && tokenAccountInfo.data) {
+    let ownerPubkey = new PublicKey(tokenAccountInfo.data.slice(32, 64))
+    console.log("ownerPubkey=", ownerPubkey.toBase58());
+    return ownerPubkey;
+  }
+  return new PublicKey("");
+}
+
+const getNFTTokenAccount = async (nftMintPk: PublicKey): Promise<PublicKey> => {
+  // console.log("getNFTTokenAccount nftMintPk=", nftMintPk.toBase58());
+  let tokenAccount = await solConnection.getProgramAccounts(
+    TOKEN_PROGRAM_ID,
+    {
+      filters: [
+        {
+          dataSize: 165
+        },
+        {
+          memcmp: {
+            offset: 64,
+            bytes: '2'
+          }
+        },
+        {
+          memcmp: {
+            offset: 0,
+            bytes: nftMintPk.toBase58()
+          }
+        },
+      ]
+    }
+  );
+  return tokenAccount[0].pubkey;
 }

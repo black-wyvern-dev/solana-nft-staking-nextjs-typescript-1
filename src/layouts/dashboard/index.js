@@ -42,17 +42,15 @@ export default function DashboardLayout({ children, ...props }) {
   const onStakeToYard = () => {
     try {
       setStakeLoading(true);
-      stakeToYard(wallet, landSelected[0], animalSelected, farmerSelected).then(() => {
+      stakeToYard(wallet, landSelected[0], animalSelected, farmerSelected, ()=>setAllUncheck(true) ).then(() => {
         updateStakedYardState(wallet.publicKey)
         spleteNFTs();
         setSelectedEmpty();
-        setAllUncheck(true);
         setStakeLoading(false);
       });
     } catch (error) {
       setStakeLoading(false);
     }
-
   }
 
   const spleteNFTs = async () => {
@@ -61,6 +59,7 @@ export default function DashboardLayout({ children, ...props }) {
     let farmers = [];
     let animals = [];
     nfts.forEach(nft => {
+      if(!nft.data.creators) return;
       const kind = bcbyValidate(nft.data.creators[0].address);
       if (kind === 1) {
         lands.push(nft)
@@ -129,7 +128,18 @@ export default function DashboardLayout({ children, ...props }) {
       for (let i = 0; i < userBarnState.yardCount; i++) {
         let lastRewardTime = rewardTime;
         if (lastRewardTime < userBarnState.yards[i].stakedTime) lastRewardTime = userBarnState.yards[i].stakedTime;
-        const count = 1 + userBarnState.yards[i].animMints.length + userBarnState.yards[i].farmerMints.length;
+        let count = 1 + userBarnState.yards[i].animMints.length + userBarnState.yards[i].farmerMints.length;
+        if (count === 3) {
+          count = 5;
+        } else if (count === 4) {
+            count = 6;
+        } else if (count === 5) {
+            count = 8;
+        } else if (count === 6) {
+            count = 10;
+        } else if (count === 7) {
+            count = 14;
+        }
         let reward = getReward(lastRewardTime) * count;
         totalReward += reward;
         setHide(!hide); //re-render
@@ -142,10 +152,14 @@ export default function DashboardLayout({ children, ...props }) {
     }, 2000);
   }
 
+  const updatePage = () => {
+    updateStakedYardState(wallet.publicKey);
+    spleteNFTs();
+  }
+
   const onWithdrawFromYard = (landMint, animMints, farmerMints) => {
-    withdrawFromYard(wallet, landMint, animMints, farmerMints, (e) => setUnstakeLoading(e)).then(() => {
-      updateStakedYardState(wallet.publicKey)
-      spleteNFTs()
+    withdrawFromYard(wallet, landMint, animMints, farmerMints, ()=>setUnstakeLoading(true), ()=> setUnstakeLoading(false), updatePage).then(() => {
+      updatePage()
     });
     setHide(!hide); //re-render
   }
@@ -220,6 +234,7 @@ export default function DashboardLayout({ children, ...props }) {
     setLandSelected([]);
     setAnimalSelected([]);
     setFarmerSelected([]);
+    setAllUncheck(true);
     setHide(!hide)
   }
 
@@ -244,7 +259,7 @@ export default function DashboardLayout({ children, ...props }) {
     }
     setHide(!hide)
     // eslint-disable-next-line
-  }, [wallet])
+  }, [wallet.connected])
 
   return (
     <>

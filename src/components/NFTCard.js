@@ -22,7 +22,8 @@ export default function NFTCard({
     setLoading(true);
     await fetch(uri).then(resp =>
       resp.json()
-    ).then((json) => {
+    ).catch((err) => 
+    console.log(err)).then((json) => {
       setNftname(json.name)
       setImage(json.image)
     })
@@ -41,7 +42,8 @@ export default function NFTCard({
   }, [])
 
   useEffect(() => {
-    setChecked(false)
+    if(allUncheck)
+      setChecked(false)
     // eslint-disable-next-line
   }, [allUncheck])
 
